@@ -43,29 +43,21 @@ class Day(models.Model):
 
 
 class Period(models.Model):
-    day = models.ForeignKey(Day, related_name="periods", on_delete=models.CASCADE)
-    start_time = models.TimeField()
-    end_time = models.TimeField()
-    order = models.PositiveSmallIntegerField(default=1)
+    PERIOD_CHOICES = [
+        ("10:00 - 11:00", "10:00 - 11:00"),
+        ("11:00 - 12:00", "11:00 - 12:00"),
+        ("02:00 - 03:00", "02:00 - 03:00"),
+        ("03:00 - 04:00", "03:00 - 04:00"),
+    ]
+
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
+    staff = models.ForeignKey(Staff, on_delete=models.CASCADE)
+    day = models.ForeignKey(Day, on_delete=models.CASCADE)
+    period_slot = models.CharField(max_length=20, choices=PERIOD_CHOICES)
 
     class Meta:
-        ordering = ["day", "order"]
-        unique_together = ["day", "order"]
+        unique_together = ("course", "day", "period_slot")
 
     def __str__(self):
-        return f"{self.day.name} {self.start_time} - {self.end_time}"
-
-    def clean(self):
-        if self.start_time and self.end_time:
-            if self.start_time >= self.end_time:
-                raise ValidationError("End time must be after start time.")
-            
-        
-        overlapping_periods = Period.objects.filter(
-            day=self.day,
-            start_time__lt=self.end_time,
-            end_time__gt=self.start_time
-        ).exclude(pk=self.pk)
-
-        if overlapping_periods.exists():
-            raise ValidationError(_("This period overlaps with an existing period for this day."))
+        return f"{self.course} - {self.day} - {self.period_slot}"
