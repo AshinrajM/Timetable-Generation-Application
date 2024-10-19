@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.exceptions import ValidationError
 
 
 class Course(models.Model):
@@ -27,7 +28,6 @@ class Staff(models.Model):
         return self.name
 
 
-
 class Day(models.Model):
     DAYS_OF_WEEK = [
         ("MON", "Monday"),
@@ -40,3 +40,32 @@ class Day(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Period(models.Model):
+    day = models.ForeignKey(Day, related_name="periods", on_delete=models.CASCADE)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    order = models.PositiveSmallIntegerField(default=1)
+
+    class Meta:
+        ordering = ["day", "order"]
+        unique_together = ["day", "order"]
+
+    def __str__(self):
+        return f"{self.day.name} {self.start_time} - {self.end_time}"
+
+    def clean(self):
+        if self.start_time and self.end_time:
+            if self.start_time >= self.end_time:
+                raise ValidationError("End time must be after start time.")
+            
+        
+        overlapping_periods = Period.objects.filter(
+            day=self.day,
+            start_time__lt=self.end_time,
+            end_time__gt=self.start_time
+        ).exclude(pk=self.pk)
+
+        if overlapping_periods.exists():
+            raise ValidationError(_("This period overlaps with an existing period for this day."))
