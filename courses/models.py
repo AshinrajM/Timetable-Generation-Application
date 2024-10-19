@@ -16,15 +16,16 @@ class Subject(models.Model):
     )
 
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.course.name})"
 
 
 class Staff(models.Model):
     name = models.CharField(max_length=100)
-    subjects = models.ManyToManyField(Subject)
+    subjects = models.ManyToManyField(Subject, related_name="staff")
 
     def __str__(self):
         return self.name
+
 
 
 class Day(models.Model):
@@ -39,4 +40,3 @@ class Day(models.Model):
 
     def __str__(self):
         return self.name
-
