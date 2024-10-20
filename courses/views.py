@@ -2,12 +2,99 @@ from django.shortcuts import render, HttpResponse
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import Period, Course, Day
-from .serializer import PeriodSerializer
+from .models import Period, Course, Day, Staff
+from .serializer import PeriodSerializer, CourseSerializer, StaffSerializer
 from collections import defaultdict
 
 
+class CourseViewSet(viewsets.ModelViewSet):
+    queryset = Course.objects.all()
+    serializer_class = CourseSerializer
+
+    def create(self, request, *args, **kwargs):
+        """
+        Create a new course.
+            request: The request object containing course data.
+            Response: A response object containing the created course data or error.
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        course = serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, pk=None, *args, **kwargs):
+        """
+        Update an existing course.
+            request: The request object containing updated course data.
+            pk: The primary key of the course to update.
+            Response: A response object containing the updated course data or error.
+        """
+        course = self.get_object()
+        serializer = self.get_serializer(course, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        course = serializer.save()
+        return Response(serializer.data)
+
+    def destroy(self, request, pk=None, *args, **kwargs):
+        """
+        Delete a course.
+            request: The request object.
+            pk: The primary key of the course to delete.
+            Response: A response object with a 204 status code.
+        """
+        course = self.get_object()
+        course.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class StaffViewSet(viewsets.ModelViewSet):
+
+    """
+    A viewset for managing staff members.
+
+    This viewset provides actions to create, retrieve, update, and delete 
+    staff members. Each staff member can be associated with multiple subjects.
+
+    Methods:
+        create: Create a new staff member.
+        update: Update an existing staff member.
+        destroy: Delete a staff member.
+    """
+
+    queryset = Staff.objects.all()
+    serializer_class = StaffSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        staff = serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, pk=None, *args, **kwargs):
+        staff = self.get_object()
+        serializer = self.get_serializer(staff, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        staff = serializer.save()
+        return Response(serializer.data)
+
+    def destroy(self, request, pk=None, *args, **kwargs):
+        staff = self.get_object()
+        staff.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class PeriodViewSet(viewsets.ModelViewSet):
+    """
+    A viewset for managing periods in a timetable.
+
+    This viewset provides actions to create and  update 
+    periods associated with courses. It allows bulk creation of periods 
+    based on the subjects of a course and can update existing periods.
+
+    Methods:
+        create_periods: Create multiple periods for a specified course.
+        update_period: Update an existing period's staff and time slot.
+    """
     queryset = Period.objects.all()
     serializer_class = PeriodSerializer
 
@@ -94,48 +181,45 @@ class PeriodViewSet(viewsets.ModelViewSet):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        #     days_of_week = ["MON", "TUE", "WED", "THU", "FRI"]
-        #     period_slots = [
-        #         "10:00 - 11:00",
-        #         "11:00 - 12:00",
-        #         "02:00 - 03:00",
-        #         "03:00 - 04:00",
-        #     ]
 
-        #     created_periods = []
+    @action(detail=True, methods=["patch"], url_path="update-period")
+    def update_period(self, request, pk=None):
 
-        #     # Get the subjects related to the course
-        #     subjects = course.subjects.all()
-        #     print("--------------------------------", subjects)
+        period_slot = request.data.get("period_slot")
+        staff_id = request.data.get("staff")
 
-        #     for day in days_of_week:
+        if not period_slot or not staff_id:
+            return Response(
+                {"error": "Period slot and staff ID must be provided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            period = Period.objects.get(id=pk)
+            staff = Staff.objects.get(id=staff_id)
 
-        #         day_instance = Day.objects.get(name=day)
+            if staff not in period.subject.staff.all():
+                return Response(
+                    {
+                        "error": f"Staff {staff.name} is not associated with subject {period.subject.name}."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-        #         for subject in subjects:
-        #             # Get the staff associated with the subject
-        #             staff_members = subject.staff.all()
+            period.staff = staff
+            period.period_slot = period_slot
+            period.save()
 
-        #             # If staff exists for the subject, proceed
-        #             if staff_members.exists():
-        #                 staff = staff_members.first()
+            return Response(PeriodSerializer(period).data, status=status.HTTP_200_OK)
 
-        #                 for period_slot in period_slots:
-        #                     if not Period.objects.filter(
-        #                         course=course, day=day_instance, period_slot=period_slot
-        #                     ).exists():
-        #                         period = Period.objects.create(
-        #                             course=course,
-        #                             day=day_instance,
-        #                             period_slot=period_slot,
-        #                             staff=staff,
-        #                             subject=subject,
-        #                         )
-        #                         created_periods.append(period)
-
-        #     serializer = self.get_serializer(created_periods, many=True)
-        #     return Response(serializer.data, status=status.HTTP_201_CREATED)
-        # except Course.DoesNotExist:
-        #     return Response(
-        #         {"error": "Course does not exist"}, status=status.HTTP_404_NOT_FOUND
-        #     )
+        except Period.DoesNotExist:
+            return Response(
+                {"error": "Period not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+        except Staff.DoesNotExist:
+            return Response(
+                {"error": "Staff not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
