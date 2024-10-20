@@ -60,4 +60,4 @@ class Period(models.Model):
         unique_together = ("course", "day", "period_slot")
 
     def __str__(self):
-        return f"{self.course} - {self.day} - {self.period_slot}"
+        return f"{self.course} - {self.day} - {self.period_slot} - {self.subject} - {self.staff}"

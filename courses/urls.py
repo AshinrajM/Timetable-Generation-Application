@@ -1,4 +1,10 @@
 from django.urls import path, include
-from . import views
+from rest_framework.routers import DefaultRouter
+from .views import PeriodViewSet
 
-urlpatterns = [path("", views.test, name="test")]
+router = DefaultRouter()
+router.register(r"periods", PeriodViewSet)
+
+urlpatterns = [
+    path("", include(router.urls)),
+]
